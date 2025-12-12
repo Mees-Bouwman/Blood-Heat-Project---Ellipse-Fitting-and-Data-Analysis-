@@ -1,7 +1,7 @@
-% Ellips-fit met handmatige regioselectie en parameteranalyse
+% Ellipse fitting with manual region selection and parameter analysis
 clear; clc; close all
 
-%% Gebruiker prompt
+%% User input prompt
 prompt = {'Number of repetitions for calibration length (default = 3):',
     'Reference length (mm, default = 10):',
     'Number of photos to do an analysis on:'
@@ -9,44 +9,44 @@ prompt = {'Number of repetitions for calibration length (default = 3):',
 
 dlgtitle = 'User Input';
 dims = [1 45];
-definput = {'4','10', '3'};   % standaardwaarden
+definput = {'4','10', '3'};   % default values
 
 answer = inputdlg(prompt, dlgtitle, dims, definput);
 
 if ~isempty(answer)
-    n_aantal_herhalingen = str2double(answer{1});
+    n_number_repetitions = str2double(answer{1});
     per_hoeveelheid_mm = str2double(answer{2});
-    n_aantal_fotos = str2double(answer{3});
+    n_number_photos = str2double(answer{3});
 else
     disp('User cancelled.');
     return
 end
 
-%% Alle foto's selecteren die geanalyseerd moeten worden (op volgorde)
-% Zorg ervoor dat de namen van de foto's juist zijn
+%% Select all photos to analyse (in order)
+% Make sure the filenames are correct using the indexing system explained
+% in the report
 [filelist, pathname] = uigetfile( ...
     {'*.jpg;*.jpeg;*.png;*.tif;*.bmp', ...
-     'Afbeeldingen (*.jpg, *.jpeg, *.png, *.tif, *.bmp)'}, ...
-    'Selecteer ALLE fotos tegelijk', ...
+     'Images (*.jpg, *.jpeg, *.png, *.tif, *.bmp)'}, ...
+    'Select ALL photos at once', ...
     'MultiSelect','on');
 
 if isequal(filelist,0)
-    error('Geen foto geselecteerd. Script gestopt.');
+    error('No photo selected. Script stopped.');
 end
 
 if ischar(filelist)
-    filelist = {filelist};   % maak cel-array
+    filelist = {filelist};   % convert to cell array
 end
 
 %% Ellipse selectie en info berekenen/opslaan
-for rep = 1:n_aantal_fotos
+for rep = 1:n_number_photos
     filename = filelist{rep};
-    img_path = fullfile(pathname, filename);
     
-    % Bestandsnaam zonder extensie als ROWNAME
+     % Filename without extension used as row name
     [~, rowName, ~] = fileparts(filename);
     
-    fprintf('\n===== Foto %d/%d: %s =====\n', rep, n_aantal_fotos, rowName);
+    fprintf('\n===== Photo %d/%d: %s =====\n', rep, n_number_photos, rowName);
     
     img_path = fullfile(pathname, filename);
     img = imread(img_path);
@@ -55,47 +55,51 @@ for rep = 1:n_aantal_fotos
     gray = imgaussfilt(gray, 2);
     
     
-    %% Kalibratie
+    %% Calibration
     figure(1)
     imshow(grayy)
     axis on; axis equal;
-    title(['Klik ', num2str(n_aantal_herhalingen), ' kalibratie lengtes aan']);
+    title(['Click ', num2str(n_number_repetitions), ' calibration lengths']);
     
-    lengte_kalibratie_pixels = zeros(n_aantal_herhalingen,1);
+    lengte_kalibratie_pixels = zeros(n_number_repetitions,1);
     
-    for i = 1:n_aantal_herhalingen
+    for i = 1:n_number_repetitions
         d_kali = drawline('LineWidth',0.5);
         pos = d_kali.Position;
-        lengte_kalibratie_pixels(i) = (sqrt((pos(2,1) - pos(1,1))^2 + (pos(2,2) - pos(1,2))^2))/per_hoeveelheid_mm;    % aantal pixels per mm
+        lengte_kalibratie_pixels(i) = (sqrt((pos(2,1) - pos(1,1))^2 + (pos(2,2) - pos(1,2))^2))/per_hoeveelheid_mm;    % number of pixels per mm
         delete(d_kali)
     end
     
-    % Kalibratielengte berekenen en printen naar de Command Window
+    % Compute and print calibration information
     lengte_kalibratie_pixels_mean = mean(lengte_kalibratie_pixels);
     lengte_kalibratie_pixels_std = std(lengte_kalibratie_pixels);
     lengte_kalibratie_pixels_min = min(lengte_kalibratie_pixels);
     lengte_kalibratie_pixels_max = max(lengte_kalibratie_pixels);
     
-    fprintf('Kalibratie\n');
-    fprintf('Gemiddelde kalibratie lengte over %.0f metingen: %.2f ± %.2f pixels per mm\n', ...
-        length(lengte_kalibratie_pixels), lengte_kalibratie_pixels_mean, lengte_kalibratie_pixels_std/(sqrt(length(lengte_kalibratie_pixels))));
+    alpha = 0.05;
+    df = n_number_repetitions - 1;
+    t_critical = tinv(1 - alpha/2, df); % Voor N=3, df=2, 95% CI
+
+    fprintf('Calibration\n');
+    fprintf('Mean Calibration length over %.0f measurements: %.2f ± %.2f pixels per mm\n', ...
+        length(lengte_kalibratie_pixels), lengte_kalibratie_pixels_mean, t_critical*lengte_kalibratie_pixels_std/(sqrt(length(lengte_kalibratie_pixels))));
     fprintf('\n');
-    fprintf('Min. Kalibratie lengte: %.2f pixels per mm\n', lengte_kalibratie_pixels_min);
-    fprintf('Max. Kalibratie lengte: %.2f pixels per mm\n', lengte_kalibratie_pixels_max);
+    fprintf('Min. Calibration length: %.2f pixels per mm\n', lengte_kalibratie_pixels_min);
+    fprintf('Max. Calibration length: %.2f pixels per mm\n', lengte_kalibratie_pixels_max);
     close(1)
     
-    %% Handmatige selectie van regio
-    % Randdetectie (Canny)
+    %% Manually selecting an area
+    % EdgeDetection (Canny)
     imshow(gray);
-    title('Selecteer een regio om uit te knippen');
+    title('Select an area to crop the image');
     rect = drawrectangle('Color','y','LineWidth',1);
     wait(rect);
     
-    % ROI parameters ophalen
-    roi = rect.Position;    % [x y width height]
+    % ROI parameters
+    roi = rect.Position;
     rect.Visible = 'off';
 
-    % Knip de afbeelding bij
+    % Crop the image
     gray_cropped = imcrop(gray, roi);
     edges = edge(gray_cropped, 'Canny', [0.01 0.15], 0.8);
 
@@ -107,21 +111,22 @@ for rep = 1:n_aantal_fotos
         boundary = B{k};
         h1 = plot(boundary(:,2), boundary(:,1), 'g.', 'MarkerSize', 5);
     end
-    title('Selecteer een ellips regio (dubbelklik om te bevestigen)')
+    title('Select an elliptical region (double-click to confirm)')
     
-    % Selecteer nodige randen
+    % Select the required edges
     rect = drawrectangle('Color', 'y', 'LineWidth',0.5);
     wait(rect);
     rect.Visible = 'off';
     
-    % Regio met pixels die niet meegenomen moeten worden
+    title('Select detected edges that are not needed (double-click to confirm)')
+    % Region with pixels that should be excluded
     rect1 = drawfreehand('Color', 'r', 'LineWidth',0.5);
     wait(rect1);
     rect1.Visible = 'off';
     
-    % Mask maken voor gedetecteerde randen
-    mask = createMask(rect);     % Hoofdregio
-    mask1 = createMask(rect1);   % Regio met pixels die niet meegenomen moeten worden
+    % Create mask for detected edges
+    mask = createMask(rect);     % Main region
+    mask1 = createMask(rect1);   % Region with pixels to be excluded
     edges_roi = edges & mask & ~mask1;
     
     [Y, X] = find(edges_roi);
@@ -137,7 +142,7 @@ for rep = 1:n_aantal_fotos
     v = solveellipse(a);
     a1 = v(1); a2 = v(2); rx0 = v(3); ry0 = v(4); theta = v(5);
     
-    %% Parameters berekenen
+    %% Compute parameters
     semi_major = max(a1, a2);
     semi_minor = min(a1, a2);
     
@@ -149,14 +154,14 @@ for rep = 1:n_aantal_fotos
     W_L_Verhouding = semi_minor/semi_major;
     D_eq = sqrt(4*semi_minor*semi_major);
     
-    % Omrekenen naar mm
+    % Convert to mm
     semi_major_mm = semi_major / lengte_kalibratie_pixels_mean;
     semi_minor_mm = semi_minor / lengte_kalibratie_pixels_mean;
     
     Oppervlakte_mm = pi * semi_major_mm * semi_minor_mm;
     D_eq_mm = sqrt(4*semi_minor_mm*semi_major_mm);
     
-    %% Plot resultaat
+    %% Plot results
     [rx, ry] = drawellip(a, x_sel, y_sel);
     
     figure(3)
@@ -168,8 +173,8 @@ for rep = 1:n_aantal_fotos
     legend([h3, h4], {'EllipseFit' , 'Ellipse-center'})
     hold off
 
-    %% Na alle berekeningen: opslaan in de table
-    results41(rep,:) = table( ...
+    %% After all calculations: store results in the table
+    results(rep,:) = table( ...
         semi_major, semi_minor, ...
         semi_major_mm, semi_minor_mm, ...
         Oppervlakte_mm, D_eq_mm, ...
@@ -182,11 +187,11 @@ for rep = 1:n_aantal_fotos
             'WL_Ratio','Eccentricity','ImpactAngle_deg','InclinationTheta_deg', ...
             'CenterX_pix','CenterY_pix' ...
         });
-    results41.Properties.RowNames{rep} = rowName;
+    results.Properties.RowNames{rep} = rowName;
 
 end
 
 disp('Results are saved')
 
-save('ellipse_results_Film_randet.mat', 'results41');
-load('ellipse_results_Film_randet.mat');   % laadt de table 'results'
+save('ellipse_results_Test.mat', 'results');
+load('ellipse_results_Test.mat');
