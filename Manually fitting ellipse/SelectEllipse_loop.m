@@ -1,7 +1,7 @@
-% Ellips-fit met handmatige regioselectie en parameteranalyse
+% Ellipse fitting with manual region selection and parameter analysis
 clear; clc; close all
 
-%% Gebruiker prompt
+%% User input prompt
 prompt = {'Number of repetitions for calibration length (default = 3):',
     'Reference length (mm, default = 10):',
     'Number of photos to do an analysis on:'
@@ -9,84 +9,90 @@ prompt = {'Number of repetitions for calibration length (default = 3):',
 
 dlgtitle = 'User Input';
 dims = [1 45];
-definput = {'4','10', '3'};   % standaardwaarden
+definput = {'4','10', '3'};   % default values
 
 answer = inputdlg(prompt, dlgtitle, dims, definput);
 
 if ~isempty(answer)
-    n_aantal_herhalingen = str2double(answer{1});
+    n_number_repetitions = str2double(answer{1});
     per_hoeveelheid_mm = str2double(answer{2});
-    n_aantal_fotos = str2double(answer{3});
+    n_number_photos = str2double(answer{3});
 else
     disp('User cancelled.');
     return
 end
 
-%% Alle foto's selecteren die geanalyseerd moeten worden (op volgorde)
-% Zorg ervoor dat de namen van de foto's juist zijn
+%% Select all photos to analyse (in order)
+% Make sure the filenames are correct using the indexing system explained
+% in the report
 [filelist, pathname] = uigetfile( ...
     {'*.jpg;*.jpeg;*.png;*.tif;*.bmp', ...
-     'Afbeeldingen (*.jpg, *.jpeg, *.png, *.tif, *.bmp)'}, ...
-    'Selecteer ALLE fotos tegelijk', ...
+     'Images (*.jpg, *.jpeg, *.png, *.tif, *.bmp)'}, ...
+    'Select ALL photos at once', ...
     'MultiSelect','on');
 
 if isequal(filelist,0)
-    error('Geen foto geselecteerd. Script gestopt.');
+    error('No photo selected. Script stopped.');
 end
 
 if ischar(filelist)
-    filelist = {filelist};   % maak cel-array
+    filelist = {filelist};   % convert to cell array
 end
 
-%% Ellipse selectie en info berekenen/opslaan
-for rep = 1:n_aantal_fotos
+%% Ellipse selection and parameter calculation/storage
+for rep = 1:n_number_photos
     filename = filelist{rep};
     img_path = fullfile(pathname, filename);
     
-    % Bestandsnaam zonder extensie als ROWNAME
+    % Filename without extension used as row name
     [~, rowName, ~] = fileparts(filename);
     
-    fprintf('\n===== Foto %d/%d: %s =====\n', rep, n_aantal_fotos, rowName);
+    fprintf('\n===== Photo %d/%d: %s =====\n', rep, n_number_photos, rowName);
     
+    % Covert image for better contrast
     img_path = fullfile(pathname, filename);
     img = imread(img_path);
     gray = im2gray(img);
     gray = histeq(gray);
     
-    %% Kalibratie
+    %% Calibration
     figure(1)
     imshow(gray)
     axis on; axis equal;
-    title(['Klik ', num2str(n_aantal_herhalingen), ' kalibratie lengtes aan']);
+    title(['Click ', num2str(n_number_repetitions), ' calibration lengths']);
     
-    lengte_kalibratie_pixels = zeros(n_aantal_herhalingen,1);
+    lengte_kalibratie_pixels = zeros(n_number_repetitions,1);
     
-    for i = 1:n_aantal_herhalingen
+    for i = 1:n_number_repetitions
         d_kali = drawline('LineWidth',0.5);
         pos = d_kali.Position;
-        lengte_kalibratie_pixels(i) = (sqrt((pos(2,1) - pos(1,1))^2 + (pos(2,2) - pos(1,2))^2))/per_hoeveelheid_mm;    % aantal pixels per mm
+        lengte_kalibratie_pixels(i) = (sqrt((pos(2,1) - pos(1,1))^2 + (pos(2,2) - pos(1,2))^2))/per_hoeveelheid_mm;    % number of pixels per mm
         delete(d_kali)
     end
     
-    % Kalibratielengte berekenen en printen naar de Command Window
+    % Compute and print calibration information
     lengte_kalibratie_pixels_mean = mean(lengte_kalibratie_pixels);
     lengte_kalibratie_pixels_std = std(lengte_kalibratie_pixels);
     lengte_kalibratie_pixels_min = min(lengte_kalibratie_pixels);
     lengte_kalibratie_pixels_max = max(lengte_kalibratie_pixels);
     
-    fprintf('Kalibratie\n');
-    fprintf('Gemiddelde kalibratie lengte over %.0f metingen: %.2f ± %.2f pixels per mm\n', ...
-        length(lengte_kalibratie_pixels), lengte_kalibratie_pixels_mean, lengte_kalibratie_pixels_std/(sqrt(length(lengte_kalibratie_pixels))));
+    alpha = 0.05;
+    df = n_number_repetitions - 1;
+    t_critical = tinv(1 - alpha/2, df); % Voor N=3, df=2, 95% CI
+
+    fprintf('Calibration\n');
+    fprintf('Mean Calibration length over %.0f measurements: %.2f ± %.2f pixels per mm\n', ...
+        length(lengte_kalibratie_pixels), lengte_kalibratie_pixels_mean, t_critical*lengte_kalibratie_pixels_std/(sqrt(length(lengte_kalibratie_pixels))));
     fprintf('\n');
-    fprintf('Min. Kalibratie lengte: %.2f pixels per mm\n', lengte_kalibratie_pixels_min);
-    fprintf('Max. Kalibratie lengte: %.2f pixels per mm\n', lengte_kalibratie_pixels_max);
+    fprintf('Min. Calibration length: %.2f pixels per mm\n', lengte_kalibratie_pixels_min);
+    fprintf('Max. Calibration length: %.2f pixels per mm\n', lengte_kalibratie_pixels_max);
     close(1)
     
    %% Ellipse Selection + obtain coordinates
     figure(2)
     imshow(gray)
     axis on; axis equal;
-    title('Teken een ellips rond de druppel of vlek')
+    title('Draw an ellipse around the droplet or stain')
     hold on
     
     h = drawellipse('Color', 'y', 'LineWidth',0.5, 'FaceAlpha', 0);
@@ -104,22 +110,23 @@ for rep = 1:n_aantal_fotos
     
     R = [cos(phi), -sin(phi);
          sin(phi),  cos(phi)];
-    
-    p = [0,  -b;   % links
-         a,  0;   % boven
-         0,  b;   % rechts
-         -a, 0];  % onder
-    
+
+    % Four corner ellipse points before rotation
+    p = [0,  -b;   % left
+         a,  0;   % top
+         0,  b;   % right
+         -a, 0];  % bottom
+
+    % Rotate and translate points
     P = (R * p')' + [x0, y0];
     
     close(2)
     
-    % Coördinaten vier punten
+    % Four coordinates
     P1 = P(1,:); P2 = P(2,:); P3 = P(3,:); P4 = P(4,:);
     
-    %% Functie aanroepen om ellipse te plotten
-    % De vier coördinaten P1 tot P4 zijn hiervoor nodig, dit zijn rijvectoren
-    % [X, Y].
+    %% Call function to compute ellipse parameters from four points
+    % The four points P1–P4 are row vectors [X, Y].
     [r0, rx, ry, semi_major, semi_minor] = ellipseFourPoints(P1, P2, P3, P4);
     
     eccentricity = sqrt(1 - ((semi_minor^2) / (semi_major^2)));
@@ -127,17 +134,17 @@ for rep = 1:n_aantal_fotos
     inclination_theta = 90 - alpha;
 
     Oppervlakte_ellips = pi * semi_major * semi_minor;
-    W_L_Verhouding = semi_minor/semi_major;
+    W_L_Ratio = semi_minor/semi_major;
     D_eq = sqrt(4*semi_minor*semi_major);
     
-    % Oppvervlakte en diameter van de ellips
+    % Convert to millimeters using calibration
     semi_major_mm = semi_major / lengte_kalibratie_pixels_mean;
     semi_minor_mm = semi_minor / lengte_kalibratie_pixels_mean;
 
-    Oppervlakte_mm = pi * semi_minor_mm * semi_major_mm;
+    Area_mm = pi * semi_minor_mm * semi_major_mm;
     D_eq_mm = sqrt(4*semi_minor_mm*semi_major_mm);
     
-    %% Alles plotten
+    %% Plot everything
     figure(3)
     imshow(img)
     axis on; axis equal; hold on
@@ -150,12 +157,12 @@ for rep = 1:n_aantal_fotos
     legend([h1, h2, h3], {'EllipseFit', 'Four selected points' , 'Ellipse-center'})
     hold off
 
-    %% Na alle berekeningen: opslaan in de table
+    %% After all calculations: store results in the table
     results(rep,:) = table( ...
         semi_major, semi_minor, ...
         semi_major_mm, semi_minor_mm, ...
-        Oppervlakte_mm, D_eq_mm, ...
-        W_L_Verhouding, eccentricity, alpha, inclination_theta, ...
+        Area_mm, D_eq_mm, ...
+        W_L_Ratio, eccentricity, alpha, inclination_theta, ...
         r0(1), r0(2), ...
         'VariableNames', { ...
             'SemiMajor_pix','SemiMinor_pix', ...
@@ -170,5 +177,5 @@ end
 
 disp('Results are saved')
 
-save('ellipse_results_Kamertemp.mat', 'results');
-load('ellipse_results_Kamertemp.mat');
+save('ellipse_results_test.mat', 'results');
+load('ellipse_results_test.mat');
