@@ -42,7 +42,6 @@ end
 %% Ellipse selection and parameter calculation/storage
 for rep = 1:n_number_photos
     filename = filelist{rep};
-    img_path = fullfile(pathname, filename);
     
     % Filename without extension used as row name
     [~, rowName, ~] = fileparts(filename);
