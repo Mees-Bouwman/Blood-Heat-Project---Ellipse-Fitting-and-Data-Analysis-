@@ -82,29 +82,6 @@ t_kritisch = tinv(1 - alpha/2, df); % N=3, df=2, 95% CI
 % W_error is determined inside the errorbar by multiplying with t_critical.
 CI_Alpha = Alpha_SEM_matrix * t_kritisch; % Averaged over the different drop heights
 
-
-%% Colors
-% Colors for the matricis
-color_90 = [1 0 0];       % Red
-color_75 = [1 0.5 0];     % orange
-color_60 = [0 0.8 0.8];   % Cyaan
-color_30 = [0 0 1];       % Vlue
-
-% Colormatrix
-colors_list_matrix = [color_90; color_75; color_60; color_30; ...
-                      color_90; color_75; color_60; color_30; ...
-                      color_90; color_75; color_60; color_30];
-
-colors_list = [color_90; color_75; color_60; color_30];
-
-% Other colors
-colors = [
-    0,     0.4470, 0.7410;   % blue
-    0.8500, 0.3250, 0.0980;  % orange
-    0.9290, 0.6940, 0.1250;  % yellow
-    0.4940, 0.1840, 0.5560   % purple
-];
-
 %% Numerically solving for the Impact Velocity
 
 % Fitting parameter
@@ -118,35 +95,46 @@ C2 = 0.8035; % A = 1.2401
 W_all = [];
 Alpha_all = [];
 
+V0_results = zeros(size(W_all));
+V0_guess = 3; 
+
+V0_all = [];
+V0_per_dataset = cell(5,1);
+
 % Extract all data for the width and impact angle and put it all in one
 % column vector
 for i = 1:5
     W_current = datasets_W_Alpha_WL_vec{i, 1};
     Alpha_current = deg2rad(datasets_W_Alpha_WL_vec{i, 2});
+    
+    V0_results = zeros(numel(W_current),1);
 
-    W_all = [W_all;W_current(:)];
-    Alpha_all = [Alpha_all;Alpha_current(:)];
-end
+    %W_all = [W_all;W_current(:)];
+    %Alpha_all = [Alpha_all;Alpha_current(:)];
 
-V0_results = zeros(size(W_all));
-V0_guess = 3; 
+    for j = 1:numel(W_current)
+        W = W_current(j);
+        alpha = Alpha_current(j);
+    
+        f = @(V0) ( ...
+            ( (rho * V0 * D0 / mu)^(1/5) ) * ...
+            ( ( ((rho * V0^2 * D0 / sigma) * (rho * V0 * D0 / mu)^(-2/5))^0.5 * sin(alpha) ) / ...
+            ( A + ((rho * V0^2 * D0 / sigma) * (rho * V0 * D0 / mu)^(-2/5))^0.5 * (sin(alpha))^(4/5) ) ) ...
+            ) - (W / D0);
+    
+        V0_results(j) = fzero(f, V0_guess);
+    end
 
-for j = 1:length(W_all)
-    W = W_all(j);
-    alpha = Alpha_all(j);
+    V0_all = [V0_all; V0_results];
 
-    f = @(V0) ( ...
-        ( (rho * V0 * D0 / mu)^(1/5) ) * ...
-        ( ( ((rho * V0^2 * D0 / sigma) * (rho * V0 * D0 / mu)^(-2/5))^0.5 * sin(alpha) ) / ...
-        ( A + ((rho * V0^2 * D0 / sigma) * (rho * V0 * D0 / mu)^(-2/5))^0.5 * (sin(alpha))^(4/5) ) ) ...
-        ) - (W / D0);
-
-    V0_results(j) = fzero(f, V0_guess);
+    V0_per_dataset{i} = V0_results;
 end
 
 % Plot a histogram of the results
+bins = 0.174;
+
 figure(1)
-histogram(V0_results, 'BinWidth', 0.174, ...
+histogram(V0_all, 'BinWidth', bins, ...
     'FaceColor',[0.2 0.6 0.8], ...
     'EdgeColor','k');
 
